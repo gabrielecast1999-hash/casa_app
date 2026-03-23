@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "608836646087",
+    "project_id": "casa-app-9d81e",
+    "storage_bucket": "casa-app-9d81e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608836646087:android:c669f0640bb09f6b1dfae2",
+        "android_client_info": {
+          "package_name": "com.casaapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxHRndE0vHQ4R3EBskJOJi4ihTtIYDpp8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
