@@ -15,6 +15,7 @@ import Toast from 'react-native-toast-message'
 import { supabase } from '../lib/supabase'
 import { apiFetch } from '../lib/api'
 import ConfirmDialog from '../components/ConfirmDialog'
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons'
 
 const STATUS_COLORS = {
   ok: '#4CAF50',
@@ -69,10 +70,10 @@ export default function TasksScreen() {
     const animation = getShakeAnimation(task.id)
     Animated.loop(
       Animated.sequence([
-        Animated.timing(animation, { toValue: 3, duration: 50, useNativeDriver: true }),
-        Animated.timing(animation, { toValue: -3, duration: 50, useNativeDriver: true }),
-        Animated.timing(animation, { toValue: 3, duration: 50, useNativeDriver: true }),
-        Animated.timing(animation, { toValue: 0, duration: 50, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: 3, duration: 200, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: -3, duration: 200, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: 3, duration: 200, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: 0, duration: 200, useNativeDriver: true }),
       ])
     ).start()
   }
@@ -266,7 +267,7 @@ export default function TasksScreen() {
               setDeleteConfirmVisible(true)
             }}
           >
-            <Text style={styles.deleteButtonText}>🗑️</Text>
+            <MaterialCommunityIcons name="delete" size={20} color="#fff" />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -286,27 +287,32 @@ export default function TasksScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>📋 Task</Text>
 
-      <FlatList
-        data={tasks}
-        keyExtractor={(item) => item.id}
-        renderItem={renderTask}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Nessun task. Aggiungine uno!</Text>
-        }
-      />
-
-      {/* Overlay per disattivare shake su click esterno */}
-      {editingTaskId && (
-        <TouchableOpacity
-          style={styles.shakeOverlay}
-          onPress={() => stopShake(editingTaskId)}
-          activeOpacity={1}
+      <View style={{ flex: 1 }}>
+        <FlatList
+          data={tasks}
+          keyExtractor={(item) => item.id}
+          renderItem={renderTask}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>Nessun task. Aggiungine uno!</Text>
+          }
+          scrollEnabled={!editingTaskId}
+          pointerEvents={editingTaskId ? 'none' : 'auto'}
         />
-      )}
+
+        {/* Overlay per disattivare shake su click esterno */}
+        {editingTaskId && (
+          <TouchableOpacity
+            style={styles.shakeOverlay}
+            onPress={() => stopShake(editingTaskId)}
+            activeOpacity={1}
+          />
+        )}
+      </View>
 
       <TouchableOpacity
         style={styles.fab}
         onPress={() => setModalVisible(true)}
+        pointerEvents="auto"
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
@@ -436,7 +442,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteButtonText: { fontSize: 16 },
+  deleteButtonText: { fontSize: 16, fontWeight: '900' },
   fab: {
     position: 'absolute',
     bottom: 30,
@@ -458,6 +464,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'transparent',
+    pointerEvents: 'auto',
+    zIndex: 99,
   },
   modalOverlay: {
     flex: 1,
