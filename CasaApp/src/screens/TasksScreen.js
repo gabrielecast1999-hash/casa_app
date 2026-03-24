@@ -11,6 +11,7 @@ import {
   Animated,
   StyleSheet,
 } from 'react-native'
+import DateTimePicker from '@react-native-community/datetimepicker'
 import Toast from 'react-native-toast-message'
 import { supabase } from '../lib/supabase'
 import { apiFetch } from '../lib/api'
@@ -44,6 +45,97 @@ const getTaskStatus = (taskLogs, frequencyDays) => {
   return 'ok'
 }
 
+// ← Componente estratto FUORI da TasksScreen
+const TaskItem = ({ item, onLog, onDelete, onEdit, styles }) => {
+  const shakeAnim = useRef(new Animated.Value(0)).current
+  const [isEditing, setIsEditing] = useState(false)
+
+  const startShake = () => {
+    setIsEditing(true)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue: 3, duration: 200, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -3, duration: 200, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 3, duration: 200, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ])
+    ).start()
+  }
+
+  const stopShake = () => {
+    setIsEditing(false)
+    shakeAnim.stopAnimation()
+    shakeAnim.setValue(0)
+  }
+
+  const status = getTaskStatus(item.task_logs, item.frequency_days)
+  const lastLog = item.task_logs?.sort((a, b) => new Date(b.done_at) - new Date(a.done_at))[0]
+  const daysSince = lastLog ? getDaysSince(lastLog.done_at) : null
+  const daysUntilDue = daysSince !== null ? item.frequency_days - daysSince : null
+
+  const getStatusText = () => {
+    if (daysSince === null) return 'Mai fatto'
+    if (daysUntilDue <= 0) return '🔴 Scaduto!'
+    if (daysUntilDue === 1) return '⚠️ Scade domani'
+    if (daysSince === 0) return 'Fatto oggi'
+    return `${daysSince} giorni fa`
+  }
+
+  return (
+    <>
+      <Animated.View style={[
+        styles.taskCard,
+        { transform: [{ translateX: shakeAnim }] }
+      ]}>
+      <TouchableOpacity
+        style={styles.taskInfo}
+        onPress={() => {
+          if (isEditing) {
+            stopShake()
+          } else {
+            onEdit(item)
+          }
+        }}
+        onLongPress={startShake}
+      >
+          <Text style={styles.taskName}>{item.icon} {item.name}</Text>
+          <Text style={styles.taskMeta}>
+            {getStatusText()}
+            {' · '}ogni {item.frequency_days} giorni
+          </Text>
+        </TouchableOpacity>
+
+        {isEditing ? (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => {
+              stopShake()
+              onDelete(item)
+            }}
+          >
+            <MaterialCommunityIcons name="delete" size={20} color="#fff" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.doneButton, { backgroundColor: STATUS_COLORS[status] }]}
+            onPress={() => onLog(item.id, item.name)}
+          >
+            <Text style={styles.doneButtonText}>✓</Text>
+          </TouchableOpacity>
+        )}
+      </Animated.View>
+
+      {isEditing && (
+        <TouchableOpacity
+          style={styles.shakeOverlay}
+          onPress={stopShake}
+          activeOpacity={1}
+        />
+      )}
+    </>
+  )
+}
+
 export default function TasksScreen() {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -55,35 +147,8 @@ export default function TasksScreen() {
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false)
   const [selectedTask, setSelectedTask] = useState(null)
-  const [editingTaskId, setEditingTaskId] = useState(null)
-  const shakeAnimations = useRef({})
-
-  const getShakeAnimation = (taskId) => {
-    if (!shakeAnimations.current[taskId]) {
-      shakeAnimations.current[taskId] = new Animated.Value(0)
-    }
-    return shakeAnimations.current[taskId]
-  }
-
-  const startShake = (task) => {
-    setEditingTaskId(task.id)
-    const animation = getShakeAnimation(task.id)
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(animation, { toValue: 3, duration: 200, useNativeDriver: true }),
-        Animated.timing(animation, { toValue: -3, duration: 200, useNativeDriver: true }),
-        Animated.timing(animation, { toValue: 3, duration: 200, useNativeDriver: true }),
-        Animated.timing(animation, { toValue: 0, duration: 200, useNativeDriver: true }),
-      ])
-    ).start()
-  }
-
-  const stopShake = (taskId) => {
-    setEditingTaskId(null)
-    const animation = getShakeAnimation(taskId)
-    animation.stopAnimation()
-    animation.setValue(0)
-  }
+  const [editLastDoneDate, setEditLastDoneDate] = useState(new Date())
+  const [showEditDatePicker, setShowEditDatePicker] = useState(false)
 
   const fetchTasks = async () => {
     try {
@@ -193,7 +258,8 @@ export default function TasksScreen() {
         body: JSON.stringify({
           name: newTaskName,
           icon: newTaskIcon || '🏠',
-          frequency_days: parseInt(newTaskFrequency)
+          frequency_days: parseInt(newTaskFrequency),
+          last_done_at: editLastDoneDate.toISOString()
         })
       }, session)
       const data = await response.json()
@@ -213,72 +279,15 @@ export default function TasksScreen() {
   }
 
   const openEditModal = (task) => {
-    stopShake(task.id)
     setSelectedTask(task)
     setNewTaskName(task.name)
     setNewTaskIcon(task.icon || '')
     setNewTaskFrequency(String(task.frequency_days))
+    const lastLog = task.task_logs?.sort(
+      (a, b) => new Date(b.done_at) - new Date(a.done_at)
+    )[0]
+    setEditLastDoneDate(lastLog ? new Date(lastLog.done_at) : new Date())
     setEditModalVisible(true)
-  }
-
-  const renderTask = ({ item }) => {
-    const status = getTaskStatus(item.task_logs, item.frequency_days)
-    const lastLog = item.task_logs?.sort((a, b) => new Date(b.done_at) - new Date(a.done_at))[0]
-    const daysSince = lastLog ? getDaysSince(lastLog.done_at) : null
-    const daysUntilDue = daysSince !== null ? item.frequency_days - daysSince : null
-    const isEditing = editingTaskId === item.id
-    const shakeAnim = getShakeAnimation(item.id)
-
-    const getStatusText = () => {
-      if (daysSince === null) return 'Mai fatto'
-      if (daysUntilDue <= 0) return '🔴 Scaduto!'
-      if (daysUntilDue === 1) return '⚠️ Scade domani'
-      if (daysSince === 0) return 'Fatto oggi'
-      return `${daysSince} giorni fa`
-    }
-
-    return (
-      <Animated.View style={[
-        styles.taskCard,
-        { transform: [{ translateX: shakeAnim }] }
-      ]}>
-        <TouchableOpacity
-          style={styles.taskInfo}
-          onPress={() => {
-            if (isEditing) {
-              openEditModal(item)
-            }
-          }}
-          onLongPress={() => startShake(item)}
-        >
-          <Text style={styles.taskName}>{item.icon} {item.name}</Text>
-          <Text style={styles.taskMeta}>
-            {getStatusText()}
-            {' · '}ogni {item.frequency_days} giorni
-          </Text>
-        </TouchableOpacity>
-
-        {isEditing ? (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => {
-              stopShake(item.id)
-              setSelectedTask(item)
-              setDeleteConfirmVisible(true)
-            }}
-          >
-            <MaterialCommunityIcons name="delete" size={20} color="#fff" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.doneButton, { backgroundColor: STATUS_COLORS[status] }]}
-            onPress={() => handleLogTask(item.id, item.name)}
-          >
-            <Text style={styles.doneButtonText}>✓</Text>
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-    )
   }
 
   if (loading) return <ActivityIndicator style={styles.loader} size="large" color="#4285F4" />
@@ -287,37 +296,30 @@ export default function TasksScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>📋 Task</Text>
 
-      <View style={{ flex: 1 }}>
-        <FlatList
-          data={tasks}
-          keyExtractor={(item) => item.id}
-          renderItem={renderTask}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>Nessun task. Aggiungine uno!</Text>
-          }
-          scrollEnabled={!editingTaskId}
-          pointerEvents={editingTaskId ? 'none' : 'auto'}
-        />
-
-        {/* Overlay per disattivare shake su click esterno */}
-        {editingTaskId && (
-          <TouchableOpacity
-            style={styles.shakeOverlay}
-            onPress={() => stopShake(editingTaskId)}
-            activeOpacity={1}
+      <FlatList
+        data={tasks}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TaskItem
+            item={item}
+            styles={styles}
+            onLog={handleLogTask}
+            onDelete={(task) => {
+              setSelectedTask(task)
+              setDeleteConfirmVisible(true)
+            }}
+            onEdit={openEditModal}
           />
         )}
-      </View>
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>Nessun task. Aggiungine uno!</Text>
+        }
+      />
 
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setModalVisible(true)}
-        pointerEvents="auto"
-      >
+      <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
-      {/* Confirm completamento */}
       <ConfirmDialog
         visible={confirmVisible}
         title="Conferma completamento"
@@ -328,7 +330,6 @@ export default function TasksScreen() {
         onCancel={() => setConfirmVisible(false)}
       />
 
-      {/* Confirm eliminazione */}
       <ConfirmDialog
         visible={deleteConfirmVisible}
         title="Elimina task"
@@ -397,6 +398,34 @@ export default function TasksScreen() {
               onChangeText={setNewTaskFrequency}
               keyboardType="numeric"
             />
+
+            <Text style={styles.inputLabel}>Ultima volta fatto:</Text>
+            <TouchableOpacity
+              style={styles.input}
+              onPress={() => setShowEditDatePicker(true)}
+            >
+              <Text style={{ fontSize: 16 }}>
+                {editLastDoneDate.toLocaleDateString('it-IT', {
+                  day: '2-digit',
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </Text>
+            </TouchableOpacity>
+
+            {showEditDatePicker && (
+              <DateTimePicker
+                value={editLastDoneDate}
+                mode="date"
+                display="default"
+                maximumDate={new Date()}
+                onChange={(event, date) => {
+                  setShowEditDatePicker(false)
+                  if (date) setEditLastDoneDate(date)
+                }}
+              />
+            )}
+
             <TouchableOpacity style={styles.primaryButton} onPress={handleEditTask}>
               <Text style={styles.primaryButtonText}>Salva modifiche</Text>
             </TouchableOpacity>
@@ -442,7 +471,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteButtonText: { fontSize: 16, fontWeight: '900' },
   fab: {
     position: 'absolute',
     bottom: 30,
@@ -464,7 +492,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'transparent',
-    pointerEvents: 'auto',
     zIndex: 99,
   },
   modalOverlay: {
@@ -485,6 +512,12 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 6,
+    marginTop: 4,
   },
   primaryButton: {
     backgroundColor: '#4285F4',

@@ -3,6 +3,27 @@ const router = express.Router()
 const supabase = require('../db/supabase')
 const authMiddleware = require('../middleware/auth')
 
+// PUT - Modifica promemoria
+router.put('/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params
+  const { title, date, repeat } = req.body
+
+  try {
+    const { data, error } = await supabase
+      .from('reminders')
+      .update({ title, date, repeat, notified_at: null })
+      .eq('id', id)
+      .eq('house_id', req.user.house_id)
+      .select()
+      .single()
+
+    if (error) return res.status(400).json({ error: error.message })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET - Lista promemoria
 router.get('/', authMiddleware, async (req, res) => {
   try {

@@ -3,11 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "android": "node update-ip.js && start cmd /k react-native start --reset-cache && react-native run-android",
+    "ios": "node update-ip.js && react-native run-ios",
     "lint": "eslint .",
-    "start": "react-native start",
-    "test": "jest"
+    "start": "node update-ip.js && react-native start --reset-cache",
+    "test": "jest",
+    "update-ip": "node update-ip.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^1.21.0",

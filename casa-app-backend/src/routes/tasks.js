@@ -6,13 +6,10 @@ const authMiddleware = require('../middleware/auth')
 // PUT - Modifica task
 router.put('/:id', authMiddleware, async (req, res) => {
   const { id } = req.params
-  const { name, icon, frequency_days } = req.body
+  const { name, icon, frequency_days, last_done_at } = req.body
 
   try {
-    if (!req.user.house_id) {
-      return res.status(400).json({ error: 'Utente non assegnato a una casa' })
-    }
-
+    // Aggiorna il task
     const { data, error } = await supabase
       .from('tasks')
       .update({ name, icon, frequency_days })
@@ -22,6 +19,24 @@ router.put('/:id', authMiddleware, async (req, res) => {
       .single()
 
     if (error) return res.status(400).json({ error: error.message })
+
+    // Se è stata fornita una data aggiorna l'ultimo log
+    if (last_done_at) {
+      // Elimina tutti i log esistenti e ne crea uno nuovo con la data fornita
+      await supabase
+        .from('task_logs')
+        .delete()
+        .eq('task_id', id)
+
+      await supabase
+        .from('task_logs')
+        .insert({
+          task_id: id,
+          user_id: req.user.id,
+          done_at: last_done_at
+        })
+    }
+
     res.json(data)
   } catch (err) {
     res.status(500).json({ error: err.message })
